@@ -10,9 +10,6 @@ Proyek ini menyediakan sistem rekomendasi untuk klinik kesehatan mental di selur
 - [Analisis Data Eksplorasi (EDA)](#analisis-data-eksplorasi-eda)
 - [Model Rekomendasi](#model-rekomendasi)
 - [Cara Menggunakan (Pengaturan Lokal)](#cara-menggunakan-pengaturan-lokal)
-- [Struktur File](#struktur-file)
-- [Ketergantungan](#ketergantungan)
-- [Pekerjaan di Masa Depan](#pekerjaan-di-masa-depan)
 
 ## Gambaran Umum Proyek
 
@@ -119,3 +116,6 @@ Untuk menjalankan proyek ini secara lokal, ikuti langkah-langkah berikut:
     * Buka `EDA.ipynb` dan jalankan semua sel untuk menjelajahi data.
     * Buka `tambahan_id.ipynb` dan jalankan semua sel untuk menambahkan UUID ke data.
     * Buka `model_rekomendasi_final.ipynb` dan jalankan semua sel untuk melihat sistem rekomendasi beraksi. Anda dapat memodifikasi kamus `user_input` di sel terakhir untuk menguji lokasi yang berbeda.
+  
+
+*note perhatikan kembali struktur folder dan sesuaikan 
