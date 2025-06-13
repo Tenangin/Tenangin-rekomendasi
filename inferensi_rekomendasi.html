@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rekomendasi Psikolog Interaktif</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style2.css">
+</head>
+<body>
+
+    <div class="container">
+        <header class="header-text">
+            <h1>Temukan Psikolog Terdekat</h1>
+            <p>Klik pada peta untuk memilih lokasi Anda dan dapatkan rekomendasi psikolog.</p>
+        </header>
+
+        <div id="map"></div>
+
+        <div id="statusArea" class="status-area">
+            <p id="statusMessage">Pilih lokasi di peta untuk memulai.</p>
+            <div id="loadingIndicator" class="loading-spinner mx-auto hidden" style="margin-left: auto; margin-right: auto;"></div>
+        </div>
+
+        <div id="recommendationListArea" class="recommendation-list-area hidden">
+            <h2>Rekomendasi Psikolog:</h2>
+            <ul id="recommendationList" class="recommendation-list">
+                </ul>
+        </div>
+    </div>
+
+    <script>
+        let map;
+        let userMarker;
+        const recommendationMarkers = L.layerGroup(); 
+        const TOP_K = 5; 
+
+        const statusMessage = document.getElementById('statusMessage');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const recommendationListArea = document.getElementById('recommendationListArea');
+        const recommendationList = document.getElementById('recommendationList');
+
+        function initMap() {
+            const defaultLat = -6.2088; 
+            const defaultLon = 106.8456; 
+            map = L.map('map').setView([defaultLat, defaultLon], 10);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            recommendationMarkers.addTo(map);
+            map.on('click', handleMapClick);
+            console.log("Peta berhasil diinisialisasi.");
+            updateStatus("Peta siap. Silakan klik lokasi Anda.", false);
+        }
+
+        function handleMapClick(e) {
+            const { lat, lng } = e.latlng;
+            console.log(`Lokasi dipilih: Lat: ${lat}, Lng: ${lng}`);
+            updateStatus(`Lokasi dipilih: Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}. Mencari rekomendasi...`, true);
+
+            if (userMarker) {
+                map.removeLayer(userMarker);
+            }
+
+            userMarker = L.marker([lat, lng], {
+                icon: L.icon({
+                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+                })
+            }).addTo(map).bindPopup("<b>Lokasi Anda</b>").openPopup();
+            map.setView([lat, lng], 13);
+
+            recommendationList.innerHTML = '';
+            recommendationListArea.classList.add('hidden');
+            getRecommendation(lat, lng);
+        }
+
+        // Fungsi untuk mengambil rekomendasi dari API
+        async function getRecommendation(lat, lon) {
+            updateStatus("Sedang mengambil rekomendasi...", true);
+            recommendationMarkers.clearLayers();
+
+            const apiUrl = `https://rizaaf-rekomendasi.hf.space/recommend?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&top_k=${TOP_K}`;
+            console.log(`Mengakses API: ${apiUrl}`);
+
+            try {
+                const response = await fetch(apiUrl);
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => null);
+                    const errorMessage = errorData?.detail || `Error HTTP: ${response.status} ${response.statusText}`;
+                    throw new Error(errorMessage);
+                }
+                const data = await response.json();
+                console.log("Data rekomendasi diterima:", data);
+                displayRecommendations(data);
+            } catch (error) {
+                console.error("Gagal mengambil rekomendasi:", error);
+                updateStatus(`Gagal mengambil data: ${error.message}`, false);
+                recommendationListArea.classList.add('hidden');
+            }
+        }
+
+        
+        function getRatingStars(rating) {
+            const numRating = parseFloat(rating);
+            if (isNaN(numRating) || numRating <= 0) return '<span>Rating tidak tersedia</span>';
+            const fullStars = Math.floor(numRating);
+            const halfStar = numRating % 1 >= 0.5 ? 1 : 0; 
+            const emptyStars = 5 - fullStars - halfStar;
+            let starsHTML = '';
+            for (let i = 0; i < fullStars; i++) starsHTML += '★'; 
+            if (halfStar) starsHTML += '½'; 
+            for (let i = 0; i < emptyStars; i++) starsHTML += '☆'; 
+            return `<span class="rating-stars">${starsHTML}</span> (${numRating.toFixed(1)})`;
+        }
+
+
+        // Fungsi untuk menampilkan rekomendasi di peta dan daftar
+        function displayRecommendations(recommendations) {
+            recommendationList.innerHTML = '';
+
+            if (!recommendations || recommendations.length === 0) {
+                updateStatus("Tidak ada rekomendasi ditemukan untuk lokasi ini.", false);
+                const listItem = document.createElement('li');
+                listItem.textContent = "Tidak ada rekomendasi ditemukan untuk lokasi ini.";
+                recommendationList.appendChild(listItem);
+                recommendationListArea.classList.remove('hidden');
+                return;
+            }
+            
+            updateStatus(`Menampilkan ${recommendations.length} rekomendasi.`, false);
+
+            const bounds = L.latLngBounds();
+            if (userMarker) {
+                bounds.extend(userMarker.getLatLng());
+            }
+
+            recommendations.forEach((psikolog, index) => {
+                const pLat = psikolog.latitude;
+                const pLon = psikolog.longitude;
+                const pName = psikolog.name || `Psikolog ${index + 1}`;
+                const pAddress = psikolog.addres_full || "Alamat tidak tersedia";
+                const pCategory = psikolog.category || "Kategori tidak diketahui";
+                const pWebsite = psikolog.website;
+                const pPhoneNumber = psikolog.phone_number;
+                const pRating = psikolog.rating;
+                const pReviewCount = psikolog.review_count;
+                const pProvinsi = psikolog.provinsi || "";
+                const pJarak = psikolog.jarak_km !== undefined ? `${parseFloat(psikolog.jarak_km).toFixed(2)} km` : "";
+
+                if (pLat === undefined || pLon === undefined) {
+                    console.warn("Data psikolog tidak lengkap (koordinat hilang):", psikolog);
+                    return;
+                }
+
+                let popupContent = `<b>${pName}</b><br>${pCategory}`;
+                if (pAddress) popupContent += `<br>${pAddress}`;
+                if (pProvinsi) popupContent += `, ${pProvinsi}`; // Gabungkan dengan alamat jika ada
+                if (pWebsite) popupContent += `<br><a href="${pWebsite.startsWith('http') ? pWebsite : 'http://' + pWebsite}" target="_blank" rel="noopener noreferrer">Website</a>`;
+                if (pPhoneNumber) popupContent += `<br>Telp: ${pPhoneNumber}`;
+                if (pRating) popupContent += `<br>Rating: ${getRatingStars(pRating)} (${pReviewCount || 0} ulasan)`;
+                if (pJarak) popupContent += `<br><p class="italic-text">Perkiraan Jarak: ${pJarak}</p>`;
+
+
+                const marker = L.marker([pLat, pLon], {
+                    icon: L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                        iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+                    })
+                }).bindPopup(popupContent);
+                recommendationMarkers.addLayer(marker);
+                bounds.extend([pLat, pLon]);
+
+                const listItem = document.createElement('li');
+                let itemHTML = `<h3>${pName}</h3><p>${pCategory}</p>`;
+                if (pAddress) itemHTML += `<p>${pAddress}${pProvinsi ? ', ' + pProvinsi : ''}</p>`;
+                if (pRating) itemHTML += `<p>Rating: ${getRatingStars(pRating)} (${pReviewCount || 0} ulasan)</p>`;
+                if (pWebsite) itemHTML += `<p><a href="${pWebsite.startsWith('http') ? pWebsite : 'http://' + pWebsite}" target="_blank" rel="noopener noreferrer">Kunjungi Website</a></p>`;
+                if (pPhoneNumber) itemHTML += `<p>Telp: ${pPhoneNumber}</p>`;
+                if (pJarak) itemHTML += `<p class="italic-text">Perkiraan Jarak: ${pJarak}</p>`;
+                
+                listItem.innerHTML = itemHTML;
+                listItem.addEventListener('click', () => {
+                    map.setView([pLat, pLon], 15);
+                    marker.openPopup();
+                });
+                recommendationList.appendChild(listItem);
+            });
+
+            if (recommendations.length > 0) {
+                recommendationListArea.classList.remove('hidden');
+                if (bounds.isValid()) {
+                    map.fitBounds(bounds, { padding: [50, 50] });
+                }
+            } else {
+                recommendationListArea.classList.add('hidden');
+            }
+        }
+
+        function updateStatus(message, isLoading) {
+            statusMessage.textContent = message;
+            loadingIndicator.classList.toggle('hidden', !isLoading);
+        }
+
+        document.addEventListener('DOMContentLoaded', initMap);
+    </script>
+
+</body>
+</html>
